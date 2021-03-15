@@ -1,55 +1,53 @@
 from pynq import Overlay
 from pynq import allocate
 import pynq.lib.dma
-from pynq import Xlnk
 import numpy as np
-import csv
 import time
 
+class Model:
+    def __init__(self, bitfile, paramfile):
+        self.overlay = Overlay(bitfile)
+        self.dma = self.overlay.axi_dma_1
+        
+        f = open(paramfile, "r")
+        self.params = f.read().split(',')
+        for i in range(len(self.params)):
+            self.params[i] = float(self.params[i])
+        self.numofparams = len(self.params)
+        
+        self.input_buffer = allocate(shape=(self.numofparams+12,), dtype=np.float32)
+        self.res = allocate(shape=(1,), dtype=np.float32)
+        
+        
+    def classify(self, input_x):
+        for i in range(12):
+            self.input_buffer[self.numofparams+i] = input_x[i]
+        self.dma.sendchannel.transfer(self.input_buffer)
+        self.dma.recvchannel.transfer(self.res)
+        self.dma.sendchannel.wait()
+        self.dma.recvchannel.wait()
+        return int(self.res[0])
 
-overlay = Overlay("design_1_1.bit")
-
-WEIGHTS_01 = 12
-WEIGHTS_12 = 4
-WEIGHTS_23 = 2
-WEIGHTS_34 = 2
-WEIGHTS_45 = 2
-WEIGHTS_56 = 4
-WEIGHTS_67 = 12
-
-dma = overlay.axi_dma_1
-
-f = open("out.csv", "r")
-
-weights = f.read().split(',')
-
-for i in range(len(weights)):
-    weights[i] = float(weights[i])
-
-### Dummy input data here ###
-input_x = [1.0] * WEIGHTS_67
-
-input_list = weights + input_x
-
-input_buffer = allocate(shape=(158,), dtype=np.float32)
-# input_list = np.array([0.0]*158)
-for i in range(158):
-    input_buffer[i] = input_list[i]
+def main():
+    # Sample of using the Model class above
     
-res = allocate(shape=(1,), dtype=np.float32)
+    # Initialize the model
+    mlp = Model("design_1_1.bit", "out.csv")
+    # Fake input here, shld be a list with 12 floats
+    input_x = [12.0] * 12
+    # classify function will return a class index (integer) with highest probability
+    mlp.classify(input_x)
+    
+    
+    # speed testing
+    time_sum = 0
+    for i in range(1000):
+        start_time = time.time()
+        mlp.classify(input_x)
+        time_sum += (time.time()-start_time)*1000  # in ms
 
-time_sum = 0
-for i in range(1000):
-    start_time = time.time()
-
-    dma.sendchannel.transfer(input_buffer)
-    dma.recvchannel.transfer(res)
-    dma.sendchannel.wait()
-    dma.recvchannel.wait()
-
-#     print("-----%s ms elapsed for transfer-----" %(1000*(time.time()-start_time)))
-    time_sum += (time.time()-start_time)*1000 #in ms
-
-average = time_sum / 1000.0
-print("Average time spent on HW data processing: ", (average), " ms")
-print("Result: ", res)
+    average = time_sum / 1000.0
+    print("Average time spent on HW data processing: ", (average), " ms")
+    
+if __name__ == "__main__":
+    main()
