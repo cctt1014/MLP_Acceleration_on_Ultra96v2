@@ -41,7 +41,7 @@ def main():
     
     # speed testing
     time_sum = 0
-    for i in range(1000):
+    while True:
         start_time = time.time()
         mlp.classify(input_x)
         time_sum += (time.time()-start_time)*1000  # in ms
